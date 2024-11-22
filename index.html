@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ESP32 Keyboard Control</title>
+    <style>
+        .control-panel {
+            max-width: 600px;
+            margin: 20px auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+        }
+        .input-group {
+            margin: 15px 0;
+        }
+        .button-group {
+            margin: 20px 0;
+        }
+        .status {
+            padding: 10px;
+            margin-top: 20px;
+        }
+        .disconnected { color: red; }
+        .connected { color: green; }
+    </style>
+</head>
+<body>
+    <div class="control-panel">
+        <h1>ESP32 Keyboard Control</h1>
+        
+        <div id="auth-status"></div>
+
+        <div class="input-group">
+            <label>Google Drive Document Link:</label>
+            <input type="text" id="doc-link" />
+        </div>
+
+        <div class="input-group">
+            <label>Typing Speed (words per second):</label>
+            <input type="number" id="speed" value="1" min="0.1" max="10" step="0.1" />
+        </div>
+
+        <div class="input-group">
+            <label>Duration (seconds, 0 for unlimited):</label>
+            <input type="number" id="duration" value="0" min="0" />
+        </div>
+
+        <div class="button-group">
+            <button id="auth-button" onclick="handleAuth()">Authenticate with Google</button>
+            <button id="start" onclick="startTyping()" disabled>Start Typing</button>
+            <button id="stop" onclick="stopTyping()" disabled>Stop</button>
+        </div>
+
+        <div id="status" class="status disconnected">Status: Disconnected</div>
+    </div>
+
+    <script>
+        const GOOGLE_CLIENT_ID = "YOUR_CLIENT_ID_HERE";
+        let ws;
+        let accessToken = null;
+
+        // Initialize WebSocket connection
+        function connect() {
+            ws = new WebSocket(`ws://${window.location.hostname}:81`);
+            
+            ws.onopen = () => {
+                document.getElementById('status').textContent = 'Status: Connected';
+                document.getElementById('status').className = 'status connected';
+                document.getElementById('start').disabled = false;
+            };
+
+            ws.onclose = () => {
+                document.getElementById('status').textContent = 'Status: Disconnected';
+                document.getElementById('status').className = 'status disconnected';
+                document.getElementById('start').disabled = true;
+                setTimeout(connect, 1000);
+            };
+        }
+
+        // Handle Google OAuth
+        function handleAuth() {
+            const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+                `client_id=${GOOGLE_CLIENT_ID}` +
+                `&redirect_uri=${window.location.origin}` +
+                `&response_type=token` +
+                `&scope=https://www.googleapis.com/auth/documents.readonly`;
+            
+            window.location.href = authUrl;
+        }
+
+        // Check for OAuth callback
+        window.onload = () => {
+            const hash = window.location.hash.substring(1);
+            const params = new URLSearchParams(hash);
+            accessToken = params.get('access_token');
+            
+            if (accessToken) {
+                document.getElementById('auth-status').textContent = 'Authenticated with Google';
+                document.getElementById('auth-button').textContent = 'Re-authenticate';
+                document.getElementById('start').disabled = false;
+                localStorage.setItem('oauth_token', accessToken);
+            }
+            
+            connect();
+        };
+
+        function startTyping() {
+            const docLink = document.getElementById('doc-link').value;
+            const speed = document.getElementById('speed').value;
+            const duration = document.getElementById('duration').value;
+
+            ws.send(JSON.stringify({
+                command: 'start',
+                url: docLink,
+                rate: speed,
+                duration: duration,
+                token: accessToken
+            }));
+
+            document.getElementById('stop').disabled = false;
+            document.getElementById('start').disabled = true;
+        }
+
+        function stopTyping() {
+            ws.send(JSON.stringify({
+                command: 'stop'
+            }));
+
+            document.getElementById('stop').disabled = true;
+            document.getElementById('start').disabled = false;
+        }
+    </script>
+</body>
+</html>
