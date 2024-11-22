@@ -1,147 +1,125 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>ESP32 Keyboard Control</title>
+    <title>ESP32 Keyboard Authentication</title>
     <style>
-        .control-panel {
-            max-width: 600px;
-            margin: 20px auto;
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+            margin: 0;
             padding: 20px;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            background: #f9f9f9;
         }
-        .input-group {
-            margin: 15px 0;
-            padding: 10px;
+
+        .auth-panel {
+            max-width: 500px;
+            margin: 40px auto;
+            padding: 30px;
             background: white;
-            border-radius: 4px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        .input-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-            color: #333;
-        }
-        .input-group input {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        .button-group {
-            margin: 20px 0;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             text-align: center;
         }
-        .button-group button {
-            padding: 10px 20px;
-            margin: 0 10px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
         }
+
+        .status-indicator {
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+
+        .auth-status {
+            font-size: 1.1em;
+            font-weight: 500;
+            margin: 10px 0;
+        }
+
+        .token-status {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        button {
+            padding: 12px 24px;
+            margin: 10px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
         #auth-button {
             background: #4285f4;
             color: white;
         }
-        #upload-button {
-            background: #34a853;
-            color: white;
+
+        #auth-button:hover {
+            background: #3367d6;
         }
-        .status {
-            padding: 10px;
-            margin-top: 20px;
-            text-align: center;
-            border-radius: 4px;
-            font-weight: bold;
+
+        #reauth-button {
+            background: #f1f3f4;
+            color: #3c4043;
         }
-        .disconnected { 
-            color: white;
-            background: #ea4335;
+
+        #reauth-button:hover {
+            background: #e8eaed;
         }
-        .connected { 
-            color: white;
-            background: #34a853;
+
+        .instructions {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            text-align: left;
         }
-        .upload-status {
-            padding: 10px;
-            margin-top: 10px;
-            text-align: center;
-            display: none;
+
+        .instructions h3 {
+            margin-top: 0;
+            color: #333;
         }
-        .upload-success {
-            color: white;
-            background: #34a853;
+
+        .instructions ol {
+            margin: 0;
+            padding-left: 20px;
         }
-        #auth-status {
-            text-align: center;
-            color: #4285f4;
+
+        .instructions li {
             margin: 10px 0;
-            font-weight: bold;
+            color: #555;
         }
     </style>
 </head>
 <body>
-    <div class="control-panel">
-        <h1 style="text-align: center; color: #333;">ESP32 Keyboard Control</h1>
+    <div class="auth-panel">
+        <h1>ESP32 Keyboard Authentication</h1>
         
-        <div id="auth-status"></div>
-
-        <div class="input-group">
-            <label>Google Drive Document Link:</label>
-            <input type="text" id="doc-link" placeholder="Paste your Google Doc URL here"/>
+        <div class="status-indicator">
+            <div id="auth-status" class="auth-status">Not Authenticated</div>
+            <div id="token-status" class="token-status"></div>
         </div>
 
-        <div class="input-group">
-            <label>Typing Speed (words per second):</label>
-            <input type="number" id="speed" value="1" min="0.1" max="10" step="0.1" />
-        </div>
+        <button id="auth-button" onclick="handleAuth()">Authenticate with Google</button>
+        <button id="reauth-button" onclick="handleAuth()" style="display: none;">Re-authenticate</button>
 
-        <div class="input-group">
-            <label>Duration (seconds, 0 for unlimited):</label>
-            <input type="number" id="duration" value="0" min="0" />
+        <div class="instructions">
+            <h3>Next Steps:</h3>
+            <ol>
+                <li>After authentication, go to your ESP32's web interface</li>
+                <li>Access: <code>http://<span id="esp-ip">your-esp32-ip</span></code></li>
+                <li>Upload your Google Doc and control typing settings there</li>
+            </ol>
         </div>
-
-        <div class="button-group">
-            <button id="auth-button" onclick="handleAuth()">Authenticate with Google</button>
-            <button id="upload-button" onclick="uploadSettings()" disabled>Upload Settings</button>
-        </div>
-
-        <div id="upload-status" class="upload-status">Settings Uploaded Successfully</div>
-        <div id="status" class="status disconnected">Status: Disconnected</div>
     </div>
 
     <script>
         const GOOGLE_CLIENT_ID = "330135463688-ti4b8s8c12lbfuav2ibprvnu6qp4572b.apps.googleusercontent.com";
-        let ws;
-        let accessToken = null;
-
-        function connect() {
-            ws = new WebSocket(`ws://${window.location.hostname}:81`);
-            
-            ws.onopen = () => {
-                document.getElementById('status').textContent = 'Status: Connected';
-                document.getElementById('status').className = 'status connected';
-                document.getElementById('upload-button').disabled = false;
-            };
-
-            ws.onclose = () => {
-                document.getElementById('status').textContent = 'Status: Disconnected';
-                document.getElementById('status').className = 'status disconnected';
-                document.getElementById('upload-button').disabled = true;
-                setTimeout(connect, 1000);
-            };
-
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                if (data.status === 'uploaded') {
-                    showUploadStatus();
-                }
-            };
-        }
-
+        
         function handleAuth() {
             const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
                 `client_id=${GOOGLE_CLIENT_ID}` +
@@ -152,43 +130,52 @@
             window.location.href = authUrl;
         }
 
+        function updateAuthStatus() {
+            const authStatus = document.getElementById('auth-status');
+            const tokenStatus = document.getElementById('token-status');
+            const authButton = document.getElementById('auth-button');
+            const reauthButton = document.getElementById('reauth-button');
+
+            const token = localStorage.getItem('oauth_token');
+            if (token) {
+                authStatus.textContent = 'Authenticated';
+                authStatus.style.color = '#34a853';
+                authButton.style.display = 'none';
+                reauthButton.style.display = 'inline-block';
+                
+                // Check token expiration
+                const expirationTime = localStorage.getItem('token_expiration');
+                if (expirationTime) {
+                    const timeLeft = Math.round((parseInt(expirationTime) - Date.now()) / 1000 / 60);
+                    tokenStatus.textContent = `Token expires in ${timeLeft} minutes`;
+                }
+            } else {
+                authStatus.textContent = 'Not Authenticated';
+                authStatus.style.color = '#ea4335';
+                authButton.style.display = 'inline-block';
+                reauthButton.style.display = 'none';
+                tokenStatus.textContent = '';
+            }
+        }
+
         window.onload = () => {
             const hash = window.location.hash.substring(1);
             const params = new URLSearchParams(hash);
-            accessToken = params.get('access_token');
+            const accessToken = params.get('access_token');
+            const expiresIn = params.get('expires_in');
             
             if (accessToken) {
-                document.getElementById('auth-status').textContent = 'Authenticated with Google';
-                document.getElementById('auth-button').textContent = 'Re-authenticate';
-                document.getElementById('upload-button').disabled = false;
                 localStorage.setItem('oauth_token', accessToken);
+                if (expiresIn) {
+                    const expirationTime = Date.now() + parseInt(expiresIn) * 1000;
+                    localStorage.setItem('token_expiration', expirationTime.toString());
+                }
+                window.location.hash = '';
             }
             
-            connect();
+            updateAuthStatus();
+            setInterval(updateAuthStatus, 60000); // Update status every minute
         };
-
-        function showUploadStatus() {
-            const uploadStatus = document.getElementById('upload-status');
-            uploadStatus.style.display = 'block';
-            uploadStatus.className = 'upload-status upload-success';
-            setTimeout(() => {
-                uploadStatus.style.display = 'none';
-            }, 3000);
-        }
-
-        function uploadSettings() {
-            const docLink = document.getElementById('doc-link').value;
-            const speed = document.getElementById('speed').value;
-            const duration = document.getElementById('duration').value;
-
-            ws.send(JSON.stringify({
-                command: 'upload',
-                url: docLink,
-                rate: speed,
-                duration: duration,
-                token: accessToken
-            }));
-        }
     </script>
 </body>
 </html>
