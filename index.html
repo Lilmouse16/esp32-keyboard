@@ -58,7 +58,6 @@
         let ws;
         let accessToken = null;
 
-        // Initialize WebSocket connection
         function connect() {
             ws = new WebSocket(`ws://${window.location.hostname}:81`);
             
@@ -76,18 +75,16 @@
             };
         }
 
-        // Handle Google OAuth
         function handleAuth() {
             const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
                 `client_id=${GOOGLE_CLIENT_ID}` +
-                `&redirect_uri=${window.location.origin}` +
+                `&redirect_uri=${window.location.origin}/esp32-keyboard/` +
                 `&response_type=token` +
                 `&scope=https://www.googleapis.com/auth/documents.readonly`;
             
             window.location.href = authUrl;
         }
 
-        // Check for OAuth callback
         window.onload = () => {
             const hash = window.location.hash.substring(1);
             const params = new URLSearchParams(hash);
