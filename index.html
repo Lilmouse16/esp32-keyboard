@@ -2,76 +2,81 @@
 <html>
 <head>
     <title>ESP32 Keyboard Authentication</title>
-    <script src="https://apis.google.com/js/api.js"></script>
-    <script src="oauth.js"></script>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+            margin: 0;
             padding: 20px;
         }
 
         .auth-panel {
-            background-color: #f5f5f5;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-width: 500px;
+            margin: 40px auto;
+            padding: 30px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
         }
 
         .status-indicator {
+            padding: 15px;
             margin: 20px 0;
-            padding: 10px;
-            background-color: #fff;
-            border-radius: 4px;
+            border-radius: 8px;
+            background: #f8f9fa;
         }
 
         .auth-status {
-            color: red;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-
-        .auth-status.authenticated {
-            color: green;
+            font-size: 1.1em;
+            font-weight: 500;
+            margin: 10px 0;
         }
 
         .token-status {
-            margin-top: 10px;
-        }
-
-        .token-status.error {
-            color: red;
-        }
-
-        .token-status.success {
-            color: green;
-        }
-
-        .token-status.info {
-            color: blue;
+            font-size: 0.9em;
+            color: #666;
         }
 
         button {
-            background-color: #4285f4;
-            color: white;
+            padding: 12px 24px;
+            margin: 10px;
             border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
+            border-radius: 6px;
+            font-size: 1em;
             cursor: pointer;
-            margin: 5px;
-            font-size: 14px;
+            transition: background 0.3s;
         }
 
-        button:hover {
-            background-color: #357abd;
+        #auth-button {
+            background: #4285f4;
+            color: white;
+        }
+
+        #auth-button:hover {
+            background: #3367d6;
+        }
+
+        #reauth-button {
+            background: #f1f3f4;
+            color: #3c4043;
+        }
+
+        #reauth-button:hover {
+            background: #e8eaed;
         }
 
         .instructions {
-            margin-top: 20px;
-            background-color: #fff;
-            padding: 15px;
-            border-radius: 4px;
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            text-align: left;
         }
 
         .instructions h3 {
@@ -79,11 +84,14 @@
             color: #333;
         }
 
-        code {
-            background-color: #f8f8f8;
-            padding: 2px 5px;
-            border-radius: 3px;
-            font-family: monospace;
+        .instructions ol {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .instructions li {
+            margin: 10px 0;
+            color: #555;
         }
     </style>
 </head>
@@ -92,34 +100,82 @@
         <h1>ESP32 Keyboard Authentication</h1>
         
         <div class="status-indicator">
-            <div id="auth-status" class="auth-status">
-                Not Authenticated
-            </div>
-            <div id="token-status" class="token-status">
-            </div>
+            <div id="auth-status" class="auth-status">Not Authenticated</div>
+            <div id="token-status" class="token-status"></div>
         </div>
 
-        <button id="authorize-button">Authenticate with Google</button>
-        <button id="signout-button">Sign Out</button>
+        <button id="auth-button" onclick="handleAuth()">Authenticate with Google</button>
+        <button id="reauth-button" onclick="handleAuth()" style="display: none;">Re-authenticate</button>
 
         <div class="instructions">
             <h3>Next Steps:</h3>
             <ol>
                 <li>After authentication, go to your ESP32's web interface</li>
-                <li>Access: <code>http://<span id="esp-ip"></span></code></li>
+                <li>Access: <code>http://<span id="esp-ip">your-esp32-ip</span></code></li>
                 <li>Upload your Google Doc and control typing settings there</li>
             </ol>
         </div>
     </div>
+
     <script>
-        document.addEventListener('DOMContentLoaded', loadGapiClient);
+        const GOOGLE_CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID"; // Replace with your actual client ID
         
-        // Get ESP32 IP from URL parameters or use default
-        const urlParams = new URLSearchParams(window.location.search);
-        const espIp = urlParams.get('ip') || localStorage.getItem('espIp') || '192.168.100.60';
-        document.getElementById('esp-ip').textContent = espIp;
-        localStorage.setItem('espIp', espIp);
+        function handleAuth() {
+            const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+                `client_id=${GOOGLE_CLIENT_ID}` +
+                `&redirect_uri=${window.location.origin}/esp32-keyboard/` +
+                `&response_type=token` +
+                `&scope=https://www.googleapis.com/auth/documents.readonly`;
+            
+            window.location.href = authUrl;
+        }
+
+        function updateAuthStatus() {
+            const authStatus = document.getElementById('auth-status');
+            const tokenStatus = document.getElementById('token-status');
+            const authButton = document.getElementById('auth-button');
+            const reauthButton = document.getElementById('reauth-button');
+
+            const token = localStorage.getItem('oauth_token');
+            if (token) {
+                authStatus.textContent = 'Authenticated';
+                authStatus.style.color = '#34a853';
+                authButton.style.display = 'none';
+                reauthButton.style.display = 'inline-block';
+                
+                // Check token expiration
+                const expirationTime = localStorage.getItem('token_expiration');
+                if (expirationTime) {
+                    const timeLeft = Math.round((parseInt(expirationTime) - Date.now()) / 1000 / 60);
+                    tokenStatus.textContent = `Token expires in ${timeLeft} minutes`;
+                }
+            } else {
+                authStatus.textContent = 'Not Authenticated';
+                authStatus.style.color = '#ea4335';
+                authButton.style.display = 'inline-block';
+                reauthButton.style.display = 'none';
+                tokenStatus.textContent = '';
+            }
+        }
+
+        window.onload = () => {
+            const hash = window.location.hash.substring(1);
+            const params = new URLSearchParams(hash);
+            const accessToken = params.get('access_token');
+            const expiresIn = params.get('expires_in');
+            
+            if (accessToken) {
+                localStorage.setItem('oauth_token', accessToken);
+                if (expiresIn) {
+                    const expirationTime = Date.now() + parseInt(expiresIn) * 1000;
+                    localStorage.setItem('token_expiration', expirationTime.toString());
+                }
+                window.location.hash = '';
+            }
+            
+            updateAuthStatus();
+            setInterval(updateAuthStatus, 60000); // Update status every minute
+        };
     </script>
 </body>
 </html>
-
