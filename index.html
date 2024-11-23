@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>ESP32 Keyboard Control</title>
+    <title>ESP32 Keyboard Authentication</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -10,310 +10,174 @@
             padding: 20px;
         }
 
-        .control-panel {
-            max-width: 800px;
-            margin: 20px auto;
+        .auth-panel {
+            max-width: 500px;
+            margin: 40px auto;
             padding: 30px;
             background: white;
             border-radius: 12px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
         }
 
         h1 {
-            text-align: center;
             color: #333;
             margin-bottom: 30px;
         }
 
-        .status-bar {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            margin-bottom: 30px;
-        }
-
         .status-indicator {
-            padding: 10px;
-            border-radius: 6px;
-            text-align: center;
-            background: #f8f9fa;
-            transition: all 0.3s ease;
-        }
-
-        .status-indicator.connected {
-            background: #e6f4ea;
-            color: #34a853;
-        }
-
-        .status-indicator.disconnected {
-            background: #fce8e6;
-            color: #ea4335;
-        }
-
-        .doc-input {
-            margin-bottom: 30px;
-        }
-
-        .doc-input input {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 1em;
-        }
-
-        .speed-controls {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        .preset-btn {
-            padding: 8px 20px;
-            margin: 0 5px;
-            border: none;
-            border-radius: 20px;
-            background: #f1f3f4;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-
-        .preset-btn:hover {
-            background: #e8eaed;
-        }
-
-        .preset-btn.active {
-            background: #4285f4;
-            color: white;
-        }
-
-        .custom-speed {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
-
-        #wpm-input {
-            width: 80px;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 1em;
-        }
-
-        .progress-section {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 30px;
-        }
-
-        .progress-stats {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 15px;
-        }
-
-        .progress-bar {
-            height: 10px;
-            background: #e8eaed;
-            border-radius: 5px;
-            overflow: hidden;
-        }
-
-        #progress-fill {
-            height: 100%;
-            background: #4285f4;
-            width: 0%;
-            transition: width 0.3s;
-        }
-
-        button#upload {
-            display: block;
-            width: 100%;
-            padding: 12px;
-            background: #4285f4;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 1.1em;
-            cursor: pointer;
-            transition: background 0.3s;
+            padding: 15px;
             margin: 20px 0;
+            border-radius: 8px;
+            background: #f8f9fa;
         }
 
-        button#upload:hover {
+        .auth-status {
+            font-size: 1.1em;
+            font-weight: 500;
+            margin: 10px 0;
+        }
+
+        .token-status {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        button {
+            padding: 12px 24px;
+            margin: 10px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        #auth-button {
+            background: #4285f4;
+            color: white;
+        }
+
+        #auth-button:hover {
             background: #3367d6;
         }
 
-        button#upload:disabled {
-            background: #ccc;
-            cursor: not-allowed;
+        #reauth-button {
+            background: #f1f3f4;
+            color: #3c4043;
         }
 
-        #upload-status {
-            text-align: center;
-            padding: 10px;
+        #reauth-button:hover {
+            background: #e8eaed;
+        }
+
+        .instructions {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            text-align: left;
+        }
+
+        .instructions h3 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        .instructions ol {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .instructions li {
             margin: 10px 0;
-            border-radius: 6px;
-            display: none;
-        }
-
-        #upload-status.success {
-            background: #e6f4ea;
-            color: #34a853;
-        }
-
-        #upload-status.error {
-            background: #fce8e6;
-            color: #ea4335;
+            color: #555;
         }
     </style>
 </head>
 <body>
-    <div class="control-panel">
-        <h1>ESP32 Keyboard Control</h1>
+    <div class="auth-panel">
+        <h1>ESP32 Keyboard Authentication</h1>
         
-        <div class="status-bar">
-            <div id="wifi-status" class="status-indicator disconnected">WiFi: Disconnected</div>
-            <div id="ble-status" class="status-indicator disconnected">Bluetooth: Disconnected</div>
-            <div id="auth-status" class="status-indicator disconnected">Auth: Not Verified</div>
+        <div class="status-indicator">
+            <div id="auth-status" class="auth-status">Not Authenticated</div>
+            <div id="token-status" class="token-status"></div>
         </div>
 
-        <div class="doc-input">
-            <input type="text" id="doc-link" placeholder="Enter Google Doc link">
-        </div>
+        <button id="auth-button" onclick="handleAuth()">Authenticate with Google</button>
+        <button id="reauth-button" onclick="handleAuth()" style="display: none;">Re-authenticate</button>
 
-        <div class="speed-controls">
-            <div class="presets">
-                <button class="preset-btn" onclick="setSpeed(20)">20 WPM</button>
-                <button class="preset-btn" onclick="setSpeed(40)">40 WPM</button>
-                <button class="preset-btn" onclick="setSpeed(60)">60 WPM</button>
-                <button class="preset-btn" onclick="setSpeed(80)">80 WPM</button>
-            </div>
-            <div class="custom-speed">
-                <label for="wpm-input">Custom WPM:</label>
-                <input type="number" id="wpm-input" min="1" max="200" value="60">
-            </div>
-        </div>
-
-        <button id="upload" onclick="uploadDoc()">Upload Document</button>
-        <div id="upload-status"></div>
-
-        <div class="progress-section">
-            <div class="progress-stats">
-                <div>Progress: <span id="progress-percent">0%</span></div>
-                <div>Words Typed: <span id="words-typed">0</span></div>
-            </div>
-            <div class="progress-bar">
-                <div id="progress-fill"></div>
-            </div>
+        <div class="instructions">
+            <h3>Next Steps:</h3>
+            <ol>
+                <li>After authentication, go to your ESP32's web interface</li>
+                <li>Access: <code>http://<span id="esp-ip">your-esp32-ip</span></code></li>
+                <li>Upload your Google Doc and control typing settings there</li>
+            </ol>
         </div>
     </div>
 
     <script>
-        const ws = new WebSocket(`ws://${window.location.hostname}:81/`);
-        let oauthToken = localStorage.getItem('oauth_token');
+        const GOOGLE_CLIENT_ID = "330135463688-ti4b8s8c12lbfuav2ibprvnu6qp4572b.apps.googleusercontent.com";
+        
+        function handleAuth() {
+            const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+                `client_id=${GOOGLE_CLIENT_ID}` +
+                `&redirect_uri=${window.location.origin}/esp32-keyboard/` +
+                `&response_type=token` +
+                `&scope=https://www.googleapis.com/auth/documents.readonly`;
+            
+            window.location.href = authUrl;
+        }
 
-        ws.onopen = () => {
-            console.log('WebSocket connected');
-            document.getElementById('wifi-status').classList.add('connected');
-            document.getElementById('wifi-status').classList.remove('disconnected');
-            document.getElementById('wifi-status').textContent = 'WiFi: Connected';
-        };
-
-        ws.onclose = () => {
-            console.log('WebSocket disconnected');
-            document.getElementById('wifi-status').classList.add('disconnected');
-            document.getElementById('wifi-status').classList.remove('connected');
-            document.getElementById('wifi-status').textContent = 'WiFi: Disconnected';
-        };
-
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.type === 'status') {
-                updateStatus(data.status);
-            } else if (data.type === 'progress') {
-                updateProgress(data.progress);
-            }
-        };
-
-        function updateStatus(status) {
-            const bleStatus = document.getElementById('ble-status');
+        function updateAuthStatus() {
             const authStatus = document.getElementById('auth-status');
+            const tokenStatus = document.getElementById('token-status');
+            const authButton = document.getElementById('auth-button');
+            const reauthButton = document.getElementById('reauth-button');
 
-            if (status.bleConnected) {
-                bleStatus.classList.add('connected');
-                bleStatus.classList.remove('disconnected');
-                bleStatus.textContent = 'Bluetooth: Connected';
-            } else {
-                bleStatus.classList.add('disconnected');
-                bleStatus.classList.remove('connected');
-                bleStatus.textContent = 'Bluetooth: Disconnected';
-            }
-
-            if (status.authenticated) {
-                authStatus.classList.add('connected');
-                authStatus.classList.remove('disconnected');
-                authStatus.textContent = 'Auth: Verified';
-            } else {
-                authStatus.classList.add('disconnected');
-                authStatus.classList.remove('connected');
-                authStatus.textContent = 'Auth: Not Verified';
-            }
-        }
-
-        function updateProgress(progress) {
-            const progressPercent = document.getElementById('progress-percent');
-            const wordsTyped = document.getElementById('words-typed');
-            const progressFill = document.getElementById('progress-fill');
-
-            progressPercent.textContent = `${progress.percent}%`;
-            wordsTyped.textContent = progress.words;
-            progressFill.style.width = `${progress.percent}%`;
-        }
-
-        function setSpeed(wpm) {
-            document.getElementById('wpm-input').value = wpm;
-        }
-
-        function uploadDoc() {
-            const docLink = document.getElementById('doc-link').value;
-            const wpm = document.getElementById('wpm-input').value;
-
-            if (!docLink || !wpm) {
-                alert('Please enter a valid Google Doc link and WPM.');
-                return;
-            }
-
-            const payload = {
-                type: 'upload',
-                docLink: docLink,
-                wpm: parseInt(wpm),
-                token: oauthToken
-            };
-
-            ws.send(JSON.stringify(payload));
-
-            const uploadStatus = document.getElementById('upload-status');
-            uploadStatus.style.display = 'block';
-            uploadStatus.classList.remove('success', 'error');
-            uploadStatus.textContent = 'Uploading document...';
-
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                if (data.type === 'uploadStatus') {
-                    if (data.status === 'success') {
-                        uploadStatus.classList.add('success');
-                        uploadStatus.textContent = 'Document uploaded successfully!';
-                    } else {
-                        uploadStatus.classList.add('error');
-                        uploadStatus.textContent = 'Failed to upload document.';
-                    }
+            const token = localStorage.getItem('oauth_token');
+            if (token) {
+                authStatus.textContent = 'Authenticated';
+                authStatus.style.color = '#34a853';
+                authButton.style.display = 'none';
+                reauthButton.style.display = 'inline-block';
+                
+                // Check token expiration
+                const expirationTime = localStorage.getItem('token_expiration');
+                if (expirationTime) {
+                    const timeLeft = Math.round((parseInt(expirationTime) - Date.now()) / 1000 / 60);
+                    tokenStatus.textContent = `Token expires in ${timeLeft} minutes`;
                 }
-            };
+            } else {
+                authStatus.textContent = 'Not Authenticated';
+                authStatus.style.color = '#ea4335';
+                authButton.style.display = 'inline-block';
+                reauthButton.style.display = 'none';
+                tokenStatus.textContent = '';
+            }
         }
+
+        window.onload = () => {
+            const hash = window.location.hash.substring(1);
+            const params = new URLSearchParams(hash);
+            const accessToken = params.get('access_token');
+            const expiresIn = params.get('expires_in');
+            
+            if (accessToken) {
+                localStorage.setItem('oauth_token', accessToken);
+                if (expiresIn) {
+                    const expirationTime = Date.now() + parseInt(expiresIn) * 1000;
+                    localStorage.setItem('token_expiration', expirationTime.toString());
+                }
+                window.location.hash = '';
+            }
+            
+            updateAuthStatus();
+            setInterval(updateAuthStatus, 60000); // Update status every minute
+        };
     </script>
 </body>
 </html>
+
 
